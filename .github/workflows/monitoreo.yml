@@ -1,0 +1,72 @@
+# El vigilante de los sitios del VPS. Corre en GitHub, FUERA del servidor: una caída del VPS (como la del nginx del
+# 04/11/2026, 4 h 27 min sin aviso) apagaría también a un vigilante que viviera adentro.
+#
+# Vive en un repo PÚBLICO a propósito (18/11/2026): en un repo privado cada corrida se cobra como un minuto entero aunque
+# dure 10 s, y cada 5 minutos eran ~4300 min/mes, más que todo el cupo de Actions de la organización. Acá no hay nada
+# que no sea público: la lista de sitios y el script. El token y el chat de Telegram son secrets del repo.
+# Antes estaba en devactory-soporte (T-103), que quedó con su copia desactivada.
+name: Monitoreo
+
+on:
+  schedule:
+    # Cada 5 minutos. GitHub puede demorarlo 10 a 15 minutos.
+    - cron: "*/5 * * * *"
+    # El día 1 de cada mes, además, se renueva el workflow (trabajo «mantener-activo»).
+    - cron: "17 3 1 * *"
+  # Prueba del aviso: gh workflow run monitoreo.yml -f url_de_prueba=https://no-existe.invalid/
+  workflow_dispatch:
+    inputs:
+      url_de_prueba:
+        description: "Si se completa, vigila SOLO esta URL, sin tocar el estado real (para probar el aviso)"
+        required: false
+
+concurrency:
+  group: monitoreo
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  vigilar:
+    if: github.event.schedule != '17 3 1 * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      # El estado (qué sitios estaban caídos) pasa de una corrida a la siguiente. Una entrada de caché no se
+      # reescribe, así que cada corrida guarda la suya y la siguiente toma la última por el prefijo.
+      - name: Recuperar el estado anterior
+        if: ${{ inputs.url_de_prueba == '' }}
+        uses: actions/cache@v6
+        with:
+          path: estado-monitoreo.txt
+          key: monitoreo-estado-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: monitoreo-estado-
+
+      - name: Vigilar los sitios
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          URL_DE_PRUEBA: ${{ inputs.url_de_prueba }}
+        run: |
+          if [ -n "$URL_DE_PRUEBA" ]; then
+            printf '%s\n' "$URL_DE_PRUEBA" > sitios-de-prueba.txt
+            bash vigilar.sh sitios-de-prueba.txt estado-de-prueba.txt || true
+          else
+            bash vigilar.sh sitios.txt estado-monitoreo.txt
+          fi
+
+  # GitHub apaga los workflows programados de un repo público tras 60 días sin actividad, y este repo casi no va a
+  # tener commits. Volver a habilitarlo una vez por mes reinicia esa cuenta sin ensuciar el historial con commits vacíos.
+  mantener-activo:
+    if: github.event.schedule == '17 3 1 * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      actions: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/monitoreo.yml/enable"

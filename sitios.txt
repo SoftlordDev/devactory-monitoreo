@@ -1,0 +1,9 @@
+# Los sitios que vigila .github/workflows/monitoreo.yml. Una URL por línea; las que empiezan con # no cuentan.
+# Se considera caído un sitio que no responde (código 000) o que responde 5xx. Un 401 o un 404 no lo es: el sitio vive.
+# Lista acordada el 13/11/2026 (T-103), según XDocWeb/docs/infraestructura-contabo.md. Quedan afuera labucp-aula y
+# labucp-moodle, que son ajenos.
+https://soporte.devactory.com/api/salud/completa
+https://portal.ucp.edu.ar/
+https://portal.ucp.edu.ar/mundo-cuenca/
+https://cdoc.ucp.edu.ar/
+https://normativa.ucp.edu.ar/
