@@ -50,6 +50,9 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           URL_DE_PRUEBA: ${{ inputs.url_de_prueba }}
+          # La llave del circuito (T-185): la pone el equipo C con `gh variable set` (sin nombres ni canal: este repo es público). La lee
+          # GitHub y no Soporte: el monitor no depende de lo que vigila. Vacía o vencida, no hace nada.
+          LLAVE: ${{ vars.LLAVE_MONITOREO }}
         run: |
           if [ -n "$URL_DE_PRUEBA" ]; then
             printf '%s\n' "$URL_DE_PRUEBA" > sitios-de-prueba.txt
