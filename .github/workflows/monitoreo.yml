@@ -81,3 +81,7 @@ jobs:
       - env:
           GH_TOKEN: ${{ github.token }}
         run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/monitoreo.yml/enable"
+            if [ -n "$CONTENIDO_DE_PRUEBA" ]; then printf '%s | %s
+' "$URL_DE_PRUEBA" "$CONTENIDO_DE_PRUEBA" > sitios-de-prueba.txt
+            else printf '%s
+' "$URL_DE_PRUEBA" > sitios-de-prueba.txt; fi
