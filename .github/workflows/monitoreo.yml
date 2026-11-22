@@ -19,6 +19,9 @@ on:
       url_de_prueba:
         description: "Si se completa, vigila SOLO esta URL, sin tocar el estado real (para probar el aviso)"
         required: false
+      contenido_de_prueba:
+        description: "Con url_de_prueba: el contenido que tiene que traer la respuesta (ej. \"estado\":\"ok\"). Un certificado se prueba con https://expired.badssl.com/"
+        required: false
 
 concurrency:
   group: monitoreo
@@ -53,6 +56,11 @@ jobs:
           # La llave del circuito (T-185): la pone el equipo C con `gh variable set` (sin nombres ni canal: este repo es público). La lee
           # GitHub y no Soporte: el monitor no depende de lo que vigila. Vacía o vencida, no hace nada.
           LLAVE: ${{ vars.LLAVE_MONITOREO }}
+          CONTENIDO_DE_PRUEBA: ${{ inputs.contenido_de_prueba }}
+          # El latido del ciclo (T-192): la clave de solo lectura es un secret y el equipo una variable (este repo es público). Sin ellos no se mira.
+          # En una prueba manual no se lee: la prueba no tiene que avisar del latido real.
+          LATIDOS_CLAVE: ${{ inputs.url_de_prueba == '' && secrets.LATIDOS_CLAVE_MONITOR || '' }}
+          LATIDOS_EQUIPO: ${{ vars.LATIDOS_EQUIPO }}
         run: |
           if [ -n "$URL_DE_PRUEBA" ]; then
             printf '%s\n' "$URL_DE_PRUEBA" > sitios-de-prueba.txt

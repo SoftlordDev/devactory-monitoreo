@@ -20,6 +20,14 @@ const srv = http.createServer((req, res) => {
   req.on('data', (c) => { cuerpo += c; });
   req.on('end', () => {
     if (req.url.startsWith('/bot')) { fs.appendFileSync(salida, new URLSearchParams(cuerpo).get('text') + '\n---\n'); res.end('{"ok":true}'); return; }
+    const lat = (banda, min) => JSON.stringify({ banda, minutosSinLatido: 45, latidos: [{ equipo: 'EQ', fuente: 'llave', minutos: min }] });
+    if (req.url === '/latidos-ok') { res.end(lat('laboral', 5)); return; }
+    if (req.url === '/latidos-viejo') { res.end(lat('laboral', 90)); return; }
+    if (req.url === '/latidos-fuera') { res.end(lat('nocturna', 600)); return; }
+    if (req.url === '/latidos-403') { res.statusCode = 403; res.end('{}'); return; }
+    if (req.url === '/latidos-500') { res.statusCode = 500; res.end('{}'); return; }
+    if (req.url === '/sano') { res.end('{ "estado": "ok" }'); return; }
+    if (req.url === '/pagina-de-error') { res.end('<h1>Error</h1> {"estado":"error"}'); return; }
     res.statusCode = req.url === '/caido' ? 503 : 200;
     res.end('x');
   });
@@ -85,6 +93,63 @@ echo "http://localhost:$puerto/caido" > "$tmp/estado.txt"; : > "$tmp/mensajes.tx
 corrida "{\"mantenimiento\":[{\"sitio\":\"localhost\",\"vence\":$((ahora + 600))}]}"
 chequear "con el sitio ya caído antes, conserva el renglón y no avisa que volvió" grep -q caido "$tmp/estado.txt"
 chequear "y no mandó nada" [ "$(mensajes)" = 0 ]
+
+echo "5. contenido esperado: un 200 sin el contenido es un sitio caído (T-192)"
+printf 'http://127.0.0.1:%s/sano | "estado":"ok"
+http://127.0.0.1:%s/pagina-de-error | "estado":"ok"
+http://127.0.0.1:%s/ok | texto que no está
+' "$puerto" "$puerto" "$puerto" > "$tmp/sitios.txt"
+rm -f "$tmp/estado.txt"; : > "$tmp/mensajes.txt"
+corrida ""
+chequear "avisó los dos que no tienen el contenido" [ "$(mensajes)" = 2 ]
+chequear "el que tiene el contenido (con espacios) no se avisó" bash -c "! grep -q /sano $tmp/mensajes.txt"
+chequear "el log no trae el cuerpo de la respuesta" bash -c "! grep -q 'Error' '$tmp/salida.txt'"
+chequear "el log dice «contenido esperado»" grep -q 'contenido esperado: no' "$tmp/salida.txt"
+
+echo "6. certificados: aviso desde los 14 días, una vez por día y otra vez a los 3 (T-192)"
+printf 'https://127.0.0.1:1/
+' > "$tmp/sitios.txt"
+rm -f "$tmp/estado.txt"; : > "$tmp/mensajes.txt"
+CERT_VENCE_DE_PRUEBA=$((ahora + 10 * 86400)) corrida ""
+chequear "avisó el certificado a 10 días" grep -q 'CERTIFICADO' "$tmp/mensajes.txt"
+: > "$tmp/mensajes.txt"
+CERT_VENCE_DE_PRUEBA=$((ahora + 10 * 86400)) corrida ""
+chequear "el mismo día no vuelve a avisar" bash -c "! grep -q CERTIFICADO '$tmp/mensajes.txt'"
+: > "$tmp/mensajes.txt"
+CERT_VENCE_DE_PRUEBA=$((ahora + 2 * 86400)) corrida ""
+chequear "a los 3 días avisa otra vez" grep -q 'CERTIFICADO' "$tmp/mensajes.txt"
+rm -f "$tmp/estado.txt"; : > "$tmp/mensajes.txt"
+CERT_VENCE_DE_PRUEBA=$((ahora - 86400)) corrida ""
+chequear "vencido: avisa que venció" grep -q 'venci' "$tmp/mensajes.txt"
+rm -f "$tmp/estado.txt"; : > "$tmp/mensajes.txt"
+CERT_VENCE_DE_PRUEBA=$((ahora + 40 * 86400)) corrida ""
+chequear "a 40 días no avisa certificado" bash -c "! grep -q CERTIFICADO '$tmp/mensajes.txt'"
+
+echo "7. latido del ciclo (T-192)"
+printf 'http://127.0.0.1:%s/ok
+' "$puerto" > "$tmp/sitios.txt"
+export LATIDOS_EQUIPO=EQ LATIDOS_CLAVE=clave-de-juguete
+latido() { LATIDOS_URL="http://127.0.0.1:$puerto/$1" corrida ""; }
+rm -f "$tmp/estado.txt"; : > "$tmp/mensajes.txt"
+latido latidos-ok
+chequear "latido al día: no avisa" [ "$(grep -c . "$tmp/mensajes.txt")" = 0 ]
+latido latidos-viejo
+chequear "latido viejo en banda laboral: avisa" grep -q 'no manda latido hace 90' "$tmp/mensajes.txt"
+: > "$tmp/mensajes.txt"; latido latidos-viejo
+chequear "no repite el aviso" [ "$(grep -c . "$tmp/mensajes.txt")" = 0 ]
+latido latidos-500
+chequear "Soporte caído: no avisa ni da por vuelto" [ "$(grep -c . "$tmp/mensajes.txt")" = 0 ]
+latido latidos-ok
+chequear "al volver el latido, avisa que volvió" grep -q 'VOLVI.*el latido' "$tmp/mensajes.txt"
+rm -f "$tmp/estado.txt"; : > "$tmp/mensajes.txt"
+latido latidos-fuera
+chequear "fuera de la banda laboral: no avisa" [ "$(grep -c . "$tmp/mensajes.txt")" = 0 ]
+latido latidos-403
+chequear "credencial rechazada: avisa" grep -q 'la credencial respondi.* 403' "$tmp/mensajes.txt"
+chequear "el log no trae la clave ni el equipo" bash -c "! grep -q -e clave-de-juguete -e EQ '$tmp/salida.txt'"
+unset LATIDOS_CLAVE
+: > "$tmp/mensajes.txt"; latido latidos-viejo
+chequear "sin credencial: no mira" [ "$(grep -c . "$tmp/mensajes.txt")" = 0 ]
 
 echo
 if [[ $fallos -eq 0 ]]; then echo "Todo bien."; else echo "$fallos fallo(s)."; exit 1; fi

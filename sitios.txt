@@ -1,8 +1,10 @@
 # Los sitios que vigila .github/workflows/monitoreo.yml. Una URL por línea; las que empiezan con # no cuentan.
+# Formato: «URL» o «URL | contenido esperado» (T-192). Con contenido, un 200 que no lo trae se considera caído (una página de error que responde 200).
+# Los sitios de la UCP quedan sin contenido esperado hasta que se acuerde uno con ellos.
 # Se considera caído un sitio que no responde (código 000) o que responde 5xx. Un 401 o un 404 no lo es: el sitio vive.
 # Lista acordada el 13/11/2026 (T-103), según XDocWeb/docs/infraestructura-contabo.md. Quedan afuera labucp-aula y
 # labucp-moodle, que son ajenos.
-https://soporte.devactory.com/api/salud/completa
+https://soporte.devactory.com/api/salud/completa | "estado":"ok"
 https://portal.ucp.edu.ar/
 https://portal.ucp.edu.ar/mundo-cuenca/
 https://cdoc.ucp.edu.ar/
